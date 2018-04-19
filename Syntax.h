@@ -1,685 +1,665 @@
-//
-//  Syntax.h
-//  Compiler
-//
-
-#ifndef Syntax_h
-#define Syntax_h
-
-#include <iostream>
-#include <iomanip>
+#include "stdafx.h"
+#include "parser.h"
 #include "lexer.h"
+#include <fstream>
+#include "globals.h"
 
-class Syntax {
-public:
-    void Rat18S();
-    void OptFuncDef();
-    void FuncDef();
-    void Func();
-    void OptParamList();
-    void ParamList();
-    void Parameter();
-    void Qualifier();
-    void Body();
-    void OptDecList();
-    void DecList();
-    void Declaration();
-    void IDs();
-    void StatementList();
-    void Statement();
-    void Compound();
-    void Assign();
-    void If();
-    void Return();
-    void Print();
-    void Scan();
-    void While();
-    void Condition();
-    void Relop();
-    void Expression();
-    void ExpressionPrime();
-    void Term();
-    void TermPrime();
-    void Factor();
-    void Primary();
-    void Empty();
-    void lexAdv();
-    
-};
+using namespace std;
 
-int tokenCounter = 0;
-vector<TokenType> tokenList;                  
-TokenType currentToken;
-bool printSwitch = true;
+vector<string> allWords;
+unsigned tokenIndex;
+Token token;
+int ruleNum;
 
-
-
-void Syntax::lexAdv() {
-   
-    if (tokenCounter < tokenList.size()) {
-        
-        currentToken = tokenList[tokenCounter];
-        if (printSwitch) {
-            
-            fout << "\nToken: " << left << setw(20) << currentToken.token
-            << left << setw(8) << "Lexeme: " << left << setw(20) << currentToken.lexeme << endl;
-        }
-        tokenCounter++;
-    }
+void Parser(vector<string> v) {
+	allWords = v;
+	tokenIndex = 0;
+	token = lexer(allWords.at(0));
+	Rat18S();
 }
 
-void Syntax::Rat18S() {
-    
-    lexAdv();
-    
-    if (printSwitch) {
-        fout << "\t<Rat18S> ::= <Opt Function Definitions>\n\t\t\t\t %% <Opt Declaration List> <Statement List> \n";
-    }
-    
-    OptFuncDef();
-    
-    if (currentToken.lexeme == "%%") {
-        lexAdv();
-        OptDecList();
-        StatementList();
-        fout << "Finished" << endl;
-    }
-    else {
-        fout << "\nSyntax Error, expecting this %% before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+void Error() {
+	fstream coutfile(outputFile, ios_base::app);
+	coutfile << "Syntax Error!" << endl;
+	coutfile.close();
+	exit(0);
+}
+
+void PrintToken(bool doit) {
+	if (doit) {
+		fstream coutfile(outputFile, ios_base::app);
+		coutfile << endl << token.type << "\t\t" << token.value << endl;
+		doit = false;
+		coutfile.close();
+	}
+}
+void NextToken() {
+	if (tokenIndex < allWords.size() ){
+		token = lexer(allWords.at(++tokenIndex));
+		PrintToken(true);
+	}
+}
+
+//old : R1: <Rat18S> → <Opt Function Definitions> %% <Opt Declaration List> <Statement List>
+//new:  R1: <Rat18S> → %% <Opt Declaration List> <Statement List>
+void Rat18S() {
+	PrintToken(true);
+	PrintRule(1);
+
+	if (token.value == "%%") {
+		NextToken();
+		OptDeclarationList();
+		StatementList();
+	}
+	else Error();
+
+	string lastWord = allWords.back();
+	if (lastWord != "$") Error();
 }
 
 
-void Syntax::OptFuncDef() {
-    
-    if (printSwitch) {
-        fout << "\t<Opt Function Definition> ::= <Function Definitions> | <Empty>\n";
-    }
-    if (currentToken.lexeme == "function") {
-        FuncDef();
-    }
-    else if (currentToken.lexeme == "%%") {
-        Empty();
-    }
-    else {
-        fout << "\nSyntax Error, expecting 'function' or '%%' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
-    
+//R6: <Opt Parameter List> → <Parameter List> | <Empty>
+void OptParameterList() {
+	PrintRule(6);
+	if (token.type == "identifier") {
+		ParameterList();
+	}
+	else
+		Empty();
 }
 
-void Syntax::FuncDef() {
-    
-    if (printSwitch) {
-        fout << "\t<Function Definitions> ::= <Function> | <Function> <Function Definitions>\n";
-    }
-    while (currentToken.lexeme == "function") {
-        Func();
-    }
+//R7: <Parameter List> → <Parameter> <Parameter List’>
+void ParameterList() {
+	PrintRule(7);
+	Parameter();
+	ParameterListP();
 }
 
-void Syntax::Func() {
-
-    if (printSwitch) {
-        fout << "\t<Function> ::= function <Identifier> [ <Opt Paramenter List> ] <Opt Declaration List> <fout>\n";
-    }
-    lexAdv();
-    
-    if (currentToken.token == "Identifier") {
-        lexAdv();
-        if (currentToken.lexeme == "[") {
-            lexAdv();
-            OptParamList();
-            if (currentToken.lexeme == "]") {
-                lexAdv();
-                OptDecList();
-                Body();
-            }
-            else {
-                fout << "\nSyntax Error, expecting ']' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-                exit(1);
-            }
-        }
-        else {
-            fout << "\nSyntax Error, expecting '[' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
-    else {
-        fout << "\nSyntax Error, expecting <Identifier> before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R8: <Parameter List’> → , <Parameter List> |  𝜀
+void ParameterListP() {
+	PrintRule(8);
+	if (token.type == "NotToken" || token.type == "COMMENT") {
+		Empty();
+	}
+	if (token.value == ",") {
+		NextToken();
+		ParameterList();
+	}
 }
 
-void Syntax::OptParamList() {
- 
-    if (printSwitch)
-        fout << "\t<Opt Parameter List> ::= <Parameter List> | <Empty>\n";
-    
-    if (currentToken.token == "Identifier") {
-        ParamList();
-    }
-    else if (currentToken.lexeme == "]") {
-        Empty();
-    }
-    else {
-        fout << "\nSyntax Error, expecting <Identifier> before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R9: <Parameter> → <IDs> : <Qualifier>
+void Parameter() {
+	PrintRule(9);
+	IDs();
+	//token = lexer(allWords.at(++tokenIndex));
+	//PrintToken(true);
+	if (token.value == ":") {
+		NextToken();
+		Qualifier();
+	}
+	else Error();
 }
 
-void Syntax::ParamList() {
-  
-    if (printSwitch)
-        fout << "\t<Parameter List> ::= <Parameter> | <Parameter>, <Parameter List>\n";
-    
-    
-    if (currentToken.token == "Identifier") {
-        Parameter();
-        if (currentToken.lexeme == ",") {
-            lexAdv();
-            ParamList();
-        }
-    }
+//R10: <Qualifier> → int | boolean | real
+void Qualifier() {
+	PrintRule(10);
+
+	if (token.value == "int" || token.value == "boolean" || token.value == "real") {
+		NextToken();
+	}
+	else Error();
 }
 
-void Syntax::Parameter() {
-    
-    if (printSwitch)
-        fout << "\t<Parameter> ::= <IDs> : <Qualifier>\n";
-    
-    IDs();
-    if (currentToken.lexeme == ":") {
-        lexAdv();
-        Qualifier();
-    }
-    else {
-        fout << "\nSyntax Error, expecting ':' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R11: <Body> → { <Statement List> }
+void Body() {
+	PrintRule(11);
+	if (token.value == "{") {
+		NextToken();
+		StatementList();
+		if (token.value == "}") {
+			NextToken();
+		}
+		else Error();
+	}
+	else Error();
 }
 
-void Syntax::Qualifier() {
-    
-    if (printSwitch)
-        fout << "\t<Qualifier> ::= int | boolean | real\n";
-    
-    if (currentToken.lexeme == "int" || currentToken.lexeme == "true"
-        || currentToken.lexeme == "false" || currentToken.lexeme == "real" || currentToken.lexeme == "boolean")
-        lexAdv();
-    else {
-        fout << "\nSyntax Error, expecting 'int', 'boolean', or 'real' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R12: <Opt Declaration List> → <Declaration List> | <Empty>
+void OptDeclarationList() {
+	PrintRule(12);
+	if (token.value == "int" || token.value == "boolean" || token.value == "real") {
+		DeclarationList();
+	}
+	else
+		Empty();
 }
 
-void Syntax::Body() {
-    
-    if (printSwitch)
-        fout << "\t<fout> ::= { <Statement List> }\n";
-    
-    if (currentToken.lexeme == "{") {
-        lexAdv();
-        StatementList();
-        if (currentToken.lexeme == "}")
-            lexAdv();
-        else {
-            fout << "\nSyntax Error, expecting '}' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
-    else {
-        fout << "\nSyntax Error, expecting '{' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R13: <Declaration List> → <Declaration> ; <Declaration List’>
+void DeclarationList() {
+	PrintRule(13);
+	if (token.value == "int" || token.value == "boolean" || token.value == "real") {
+		Declaration();
+		if (token.value == ";") {
+			NextToken();
+			DeclarationListP();
+		}
+		else
+			Error();
+	}
+	
+	else
+		Error();
 }
 
-void Syntax::OptDecList() {
-    
-    if (printSwitch) {
-        fout << "\t<Opt Declaration List> ::= <Declaration List> | <Empty>\n";
-    }
-    
-    if (currentToken.lexeme == "{") {
-        Empty();
-    }
-    else if (currentToken.lexeme == "int" || currentToken.lexeme == "boolean" || currentToken.lexeme == "real") {
-        DecList();
-    }
-    else {
-        fout << "\nSyntax Error, expecting 'int', 'boolean', or 'real' before '" << currentToken.lexeme << "' on line: " << currentToken.linenum;
-        exit(1);
-    }
+//R14: <Declaration List’> → <Declaration List> | <Empty>
+void DeclarationListP() {
+	PrintRule(14);
+
+	if (token.value == "int" || token.value == "boolean" || token.value == "real") {
+		DeclarationList();
+	}
+	else
+		Empty();
 }
 
-void Syntax::DecList() {
-    
-    if (printSwitch) {
-        fout << "\t<Declaration List> ::= <Declaration>; | <Declaration> ; <Declaration List>\n";
-    }
-    
-    Declaration();
-    if (currentToken.lexeme == ";") {
-        lexAdv();
-        if (currentToken.lexeme == "int" || currentToken.lexeme == "boolean" || currentToken.lexeme == "real") {
-            DecList();
-        }
-    }
-    else {
-        fout << "\nSyntax Error, expecting ';' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R15: <Declaration> → <Qualifier> <IDs>
+void Declaration() {
+	PrintRule(15);
+	Qualifier();
+	IDs();
 }
 
-void Syntax::Declaration() {
-    
-    if (printSwitch)
-        fout << "\t<Declaration> ::= <Qualifier> <IDs>\n";
-    
-    Qualifier();
-    IDs();
+//R16: <IDs> → <Identifier> <IDs’>
+void IDs() {
+	PrintRule(16);
+	NextToken();
+	IDsP();
 }
 
-void Syntax::IDs() {
-    
-    if (printSwitch) {
-        fout << "\t<IDs> ::= <Identifier> | <Identifier>, <IDs>\n";
-    }
-    if (currentToken.token == "Identifier") {
-        lexAdv();
-        if (currentToken.lexeme == ",") {
-            lexAdv();
-            IDs();
-        }
-        else if (currentToken.token == "Identifier") {
-            fout << "\nSyntax Error, expecting ',' between multiple identifiers on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
-    else {
-        fout << "\nSyntax Error, expecting <Identifier> before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R17: <IDs’> → , <IDs> | <Empty>
+void IDsP() {
+	PrintRule(17);
+	if (token.type == "NotToken" || token.type == "COMMENT" || token.value != ",") {
+		Empty();
+	}
+	else {
+		if (token.value == ",") {
+			NextToken();
+			IDs();
+		}
+		else Error();
+	}
 }
 
-void Syntax::StatementList() {
-    
-    if (printSwitch) {
-        fout << "\t<Statement List> ::= <Statement> | <Statement> <Statement List>\n";
-    }
-    while (currentToken.lexeme == "if" || currentToken.lexeme == "return" || currentToken.lexeme == "put"
-           || currentToken.lexeme == "get" || currentToken.lexeme == "while" || currentToken.token == "Identifier"
-           || currentToken.lexeme == "function") {
-        Statement();
-    }
+//R18: <Statement List> → <Statement> <Statement List’>
+void StatementList() {
+	PrintRule(18);
+	Statement();
+	StatementListP();
 }
 
-void Syntax::Statement() {
-    
-    if (printSwitch)
-        fout << "\t<Statement> ::= <Compound> | <Assign> | <If> | <Return> | <Print> | <Scan> | <While>\n";
-    
-    if (currentToken.lexeme == "{")
-        Compound();
-    else if (currentToken.token == "Identifier")
-        Assign();
-    else if (currentToken.lexeme == "if")
-        If();
-    else if (currentToken.lexeme == "return")
-        Return();
-    else if (currentToken.lexeme == "put")
-        Print();
-    else if (currentToken.lexeme == "get")
-        Scan();
-    else if (currentToken.lexeme =="function")
-        Func();
-    else if (currentToken.lexeme == "while")
-        While();
-    else {
-        fout << "\nSyntax Error, expecting proper '<Statement>' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R19: <Statement List’> → <Statement List> | <Empty>
+void StatementListP() {
+	PrintRule(19);
+	if (token.type == "NotToken" || token.type == "COMMENT") {
+		Empty();
+	}
+	else {
+		StatementList();
+	}
+
 }
 
-void Syntax::Compound() {
-    
-    if (printSwitch)
-        fout << "\t<Compound> ::= {<Statement List>}\n";
-    
-    if (currentToken.lexeme == "{") {
-        lexAdv();
-        StatementList();
-        if (currentToken.lexeme == "}") {
-            lexAdv();
-        }
-    }
+//R20: <Statement> → <Compound> | <Assign> | <If> | <Return> | <Print> | <Scan> | <While>
+void Statement() {
+	PrintRule(20);
+	// Check if <Compound>
+	if (token.value == "{") {
+		Compound();
+	}
+
+	// Check if <Assign>
+	else if (token.type == "identifier") {
+		Assign();
+	}
+
+	// Check <If>
+	else if (token.value == "if") {
+		If();
+	}
+
+	// Check <Return>
+	else if (token.value == "return") {
+		Return();
+	}
+
+	// Check <Print>
+	else if (token.value == "put") {
+		Print();
+	}
+
+	// Check <Scan>
+	else if (token.value == "get") {
+		Scan();
+	}
+
+	// Check <While>
+	else if (token.value == "while") {
+		While();
+	}
+
+	else Error();
 }
 
-void Syntax::Assign() {
-    
-    if (printSwitch)
-        fout << "\t<Assign> ::= <Identifier> = <Expression>;\n";
-    
-    if (currentToken.token == "Identifier") {
-        lexAdv();
-        if (currentToken.lexeme == "=") {
-            lexAdv();
-            Expression();
-            if (currentToken.lexeme == ";")
-                lexAdv();
-            else {
-                fout << "\n<Assign> Syntax Error";
-                exit(1);
-            }
-        }
-        else {
-            fout << "\nSyntax Error, expecting '=' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
+//R21: <Compound> → { <Statement List> }
+void Compound() {
+	PrintRule(21);
+	if (token.value == "{") {
+		NextToken();
+		StatementList();
+		if (token.value == "}") {
+			NextToken();
+		}
+		else Error();
+	}
+	else Error();
 }
 
-void Syntax::If() {
-    
-    if (printSwitch)
-        fout << "\t<If> ::= if (<Condition>) <Statement> endif | if (<Condition>) <Statement> else <Statement> endif\n";
-    if (currentToken.lexeme == "if") {
-        lexAdv();
-        if (currentToken.lexeme == "(") {
-            lexAdv();
-            Condition();
-            if (currentToken.lexeme == ")") {
-                lexAdv();
-                Statement();
-                if (currentToken.lexeme == "endif") {
-                    lexAdv();
-                }
-                else if (currentToken.lexeme == "else") {
-                    lexAdv();
-                    Statement();
-                    if (currentToken.lexeme == "endif") {
-                        lexAdv();
-                    }
-                    else {
-                        fout << "\nSyntax Error, expecting 'endif' on line " << currentToken.linenum;
-                        exit(1);
-                    }
-                }
-                else {
-                    fout << "\nSyntax Error, expecting 'endif' or 'else' on line " << currentToken.linenum;
-                    exit(1);
-                }
-            }
-            else {
-                fout << "\nSyntax Error, expecting ) after <Condition> on line " << currentToken.linenum;
-                exit(1);
-            }
-        }
-        else {
-            fout << "\nSyntax Error, expecting ( on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
+//R22: <Assign> → <Identifier> = <Expression> ;
+void Assign() {
+	PrintRule(22);
+	if (token.type == "identifier") {
+		NextToken();
+		if (token.value == "=") {
+			NextToken();
+			Expression();
+			if (token.value == ";") {
+				token = lexer(allWords.at(++tokenIndex));
+				PrintToken(true);
+			}
+			else
+				Error();
+		}
+		else
+			Error();
+	}
+	else
+		Error();
 }
 
-void Syntax::Return() {
-    
-    if (printSwitch)
-        fout << "\t<Return> ::= return; | return <Expression>;\n";
-    
-    lexAdv();
-    if (currentToken.lexeme == ";") {
-        lexAdv();
-    }
-    else
-    {
-        Expression();
-        if (currentToken.lexeme == ";")
-            lexAdv();
-        else {
-            fout << "\nSyntax Error, expecting ';' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
+//R23: <If> → if ( <Condition> ) <Statement> <If’> endif
+void If() {
+	PrintRule(23);
+	if (token.value == "if") {
+		NextToken();
+		if (token.value == "(") {
+			NextToken();
+			Condition();
+			if (token.value == ")") {
+				NextToken();
+				Statement();
+				IfP();
+				NextToken();
+				if (token.value == "endif") {
+					NextToken();
+				}
+				else
+					Error();
+			}
+		}
+	}
+	else Error();
 }
 
-void Syntax::Print() {
-    
-    if (printSwitch)
-        fout << "\t<Print> ::= print (<Expressions>);\n";
-    
-    lexAdv();
-    if (currentToken.lexeme == "(") {
-        lexAdv();
-        Expression();
-        if (currentToken.lexeme == ")") {
-            lexAdv();
-            if (currentToken.lexeme == ";")
-                lexAdv();
-            else {
-                fout << "\nSyntax Error, expecting ';' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-                exit(1);
-            }
-        }
-        else {
-            fout << "\nSyntax Error, expecting ')' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
-    else {
-        fout << "\nSyntax Error, expecting '(' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R24: <If’> → else <Statement> | <Empty>
+void IfP() {
+	PrintRule(24);
+	if (token.type == "NotToken" || token.type == "COMMENT") {
+		Empty();
+	}
+	else {
+		if (token.value == "else") {
+			NextToken();
+			Statement();
+		}
+		else
+			Error();
+	}
 }
 
-void Syntax::Scan() {
-    
-    if (printSwitch)
-        fout << "\t<Scan> ::= get (<IDs>);\n";
-    
-    lexAdv();
-    if (currentToken.lexeme == "(") {
-        lexAdv();
-        IDs();
-        if (currentToken.lexeme == ")") {
-            lexAdv();
-            if (currentToken.lexeme == ";")
-                lexAdv();
-            else {
-                fout << "\nSyntax Error. Expecting ';' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-                exit(1);
-            }
-        }
-        else {
-            fout << "\nSyntax Error, expecting ')' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
-    else {
-        fout << "\nSyntax Error, expecting '(' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R25: <Return> → return <Return’> ;
+void Return() {
+	PrintRule(25);
+	if (token.value == "return") {
+		NextToken();
+		ReturnP();
+		if (token.value == ";") {
+			NextToken();
+		}
+		else
+			Error();
+	}
+	else Error();
 }
 
-void Syntax::While() {
-    
-    if (printSwitch)
-        fout << "\t<While> ::= while (<Condition>) <Statement>\n";
-    
-    lexAdv();
-    if (currentToken.lexeme == "(")
-    {
-        lexAdv();
-        Condition();
-        if (currentToken.lexeme == ")")
-        {
-            lexAdv();
-            Statement();
-        }
-    }
+//R26: <Return’> → <Expression> | 𝜀
+void ReturnP() {
+	PrintRule(26);
+	if (token.type == "Not Token" || token.type == "COMMENT") {
+		Empty();
+	}
+	else {
+		Expression();
+	}
+
 }
 
-void Syntax::Condition() {
-    
-    if (printSwitch)
-        fout << "\t<Condition> ::= <Expression> <Relop> <Expression>\n";
-    
-    Expression();
-    Relop();
-    Expression();
-    
+//R27: <Print> → put (<Expression>);
+void Print() {
+	PrintRule(27);
+	if (token.value == "put") {
+		NextToken();
+		if (token.value == "(") {
+			NextToken();
+			Expression();
+			if (token.value == ")") {
+				NextToken();
+				if (token.type == ";") {
+					NextToken();
+				}
+				else Error();
+			}
+			else Error();
+		}
+		else Error();
+	}
+	else Error();
 }
 
-void Syntax::Relop() {
-    
-    if (printSwitch)
-        fout << "\t<Relop> ::= == | ^= | > | < | => | =<\n";
-    
-    if (currentToken.lexeme == "==" || currentToken.lexeme == "^=" || currentToken.lexeme == ">"
-        || currentToken.lexeme == "<" || currentToken.lexeme == "=>" || currentToken.lexeme == "=<")
-    {
-        lexAdv();
-    }
-    else
-    {
-        fout << "\nSyntax error, expecting valid comparison operator before " << currentToken.lexeme << " on line " << currentToken.linenum;
-        exit(1);
-    }
+//R28: <Scan> → get(<IDs>);
+void Scan() {
+	PrintRule(28);
+	if (token.value == "get") {
+		NextToken();
+		if (token.value == "(") {
+			NextToken();
+			IDs();
+			if (token.value == ")") {
+				NextToken();
+				if (token.value == ";") {
+					NextToken();
+				}
+				else Error();
+			}
+			else Error();
+		}
+		else Error();
+	}
+	else Error();
 }
 
-void Syntax::Expression() {
-    
-    if (printSwitch)
-        fout << "\t<Expression> ::= <Term> <Expression Prime>\n";
-    
-    Term();
-    ExpressionPrime();
+//R29: <While> → while (<Condition>) <Statement>
+void While() {
+	PrintRule(29);
+	if (token.value == "while") {
+		NextToken();
+		if (token.value == "(") {
+			NextToken();
+			Condition();
+			if (token.value == ")") {
+				NextToken();
+				Statement();
+			}
+			else Error();
+		}
+		else Error();
+	}
+	else Error();
 }
 
-void Syntax::ExpressionPrime() {
-   
-    if (printSwitch)
-        fout << "\t<Expression Prime> ::= + <Term> <Expression Prime> | - <Term> <Expression Prime> | <Empty>\n";
-    
-    if (currentToken.lexeme == "+" || currentToken.lexeme == "-")
-    {
-        lexAdv();
-        Term();
-        ExpressionPrime();
-    }
-    else if (currentToken.token == "Unknown") {
-        fout << "\nSyntax error, expecting '+', '-', or nothing before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
-    else {
-        Empty();
-    }
+//R30: <Condition> → <Expression> <Relop> <Expression>
+void Condition() {
+	PrintRule(30);
+	Expression();
+	Relop();
+	Expression();
 }
 
-void Syntax::Term() {
-    
-    if (printSwitch)
-        fout << "\t<Term> ::= <Factor> <Term Prime>\n";
-    
-    Factor();
-    TermPrime();
+//R31: <Relop> → == | ^= | > | < | => | =<
+void Relop() {
+	PrintRule(31);
+	if (token.value == "==" || token.value == "^=" || token.value == ">" ||
+		token.value == "<" || token.value == "=>" || token.value == "=<") {
+		NextToken();
+	}
+	else Error();
 }
 
-void Syntax::TermPrime() {
-    
-    if (printSwitch)
-        fout <<  "\t<Term Prime> ::= * <Factor> <Term Prime> | / <Factor> <Term Prime> | <Empty>\n";
-    
-    if (currentToken.lexeme == "*" || currentToken.lexeme == "/") {
-        lexAdv();
-        Factor();
-        TermPrime();
-    }
-    else if (currentToken.token == "Unknown") {
-        fout << "\nSyntax Error, expecting '*', '/', or 'Empty' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
-    else {
-        Empty();
-    }
+//R32: <Expression> → <Term> <Expression’>
+void Expression() {
+	PrintRule(32);
+	Term();
+	ExpressionP();
 }
 
-void Syntax::Factor() {
-    
-    if (printSwitch)
-        fout << "\t<Factor> ::= - <Primary> | <Primary>\n";
-    
-    if (currentToken.lexeme == "-") {
-        lexAdv();
-        Primary();
-    }
-    
-    else if (currentToken.token != "Unknown") {
-        Primary();
-    }
-    
-    else {
-        fout << "\nSyntax Error, expecting something different before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R33: <Expression’> → + <Term> <Expression’> | - <Term> <Expression’> | 𝜀
+void ExpressionP() {
+	PrintRule(33);
+	if (token.value == "+" || token.value == "-") {
+		NextToken();
+		Term();
+		ExpressionP();
+	}
+	else Empty();
 }
 
-void Syntax::Primary() {
-    
-    if (printSwitch)
-        fout << "\t<Primary> ::= <Identifier> | <Integer> | <Identifier> [<IDs>] | (<Expression>) | <Real> | true | false\n";
-    
-    if (currentToken.token == "Identifier") {
-        lexAdv();
-        if (currentToken.lexeme == "[") {
-            lexAdv();
-            IDs();
-            if (currentToken.lexeme == "]") {
-                lexAdv();
-            }
-            else {
-                fout << "\nSyntax Error, expecting ']' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-                exit(1);
-            }
-        }
-        else {
-            // Do nothing
-        }
-        
-    }
-    
-    else if (currentToken.token == "Integer" || currentToken.token == "Real") {
-        lexAdv();
-    }
-    
-    else if (currentToken.lexeme == "(") {
-        lexAdv();
-        Expression();
-        if (currentToken.lexeme == ")") {
-            lexAdv();
-        }
-        else {
-            fout << "\nSyntax Error, expecting ')' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-            exit(1);
-        }
-    }
-    
-    else if (currentToken.lexeme == "true" || currentToken.lexeme == "false") {
-        lexAdv();
-    }
-    else {
-        fout << "\nSyntax Error, expecting '<Identifer>', '<Qualifier>' or '<Expression>' before '" << currentToken.lexeme << "' on line " << currentToken.linenum;
-        exit(1);
-    }
+//R34: <Term> → <Factor> <Term’>
+void Term() {
+	PrintRule(34);
+	Factor();
+	TermP();
 }
 
-void Syntax::Empty() {
-    if (printSwitch)
-        fout << "\t<Empty> ::= epsilon\n";
-    
+//R35: <Term’> → * <Factor> <Term’> | / <Factor> <Term’> | 𝜀
+void TermP() {
+	PrintRule(35);
+	if  (token.value == "*" || token.value == "/") {
+		NextToken();
+		Factor();
+		TermP();
+	}
+	else Empty();
 }
 
+//R36: <Factor> → - <Primary> | <Primary>
+void Factor() {
+	PrintRule(36);
+	if (token.value == "-") {
+		NextToken();
+		Primary();
+	}
+	else {
+		Primary();
+	}
+}
 
+//R37: <Primary> → <Identifier> | <Integer> | <Identifier> (<IDs>) | (<Expression>) | <Real> | true | false
+void Primary() {
+	PrintRule(37);
+	if (token.type == "identifier") {
+		NextToken();
+		if (token.value == "[") {
+			NextToken();
+			IDs();
+			if (token.type == "]") {
+				NextToken();
+			}
+			else
+				Error();
+		}
+		else {
 
-#endif /* Syntax_h */
+		}
+	}
+	else if (token.type == "integer") {
+		Integer();
+	}
+	else if (token.value == "(") {
+		NextToken();
+		Expression();
+		if (token.value == ")") {
+			NextToken();
+		}
+		else Error();
+	}
+	else if (token.type == "real") {
+		Real();
+	}
+	else if (token.value == "true" || token.value == "false") {
+		NextToken();
+	}
+	else Error();
+}
+
+//R38: <Empty> → 𝜀
+void Empty() {
+	PrintRule(38);
+}
+
+void PrintRule(int ruleNum) {
+	fstream coutfile(outputFile, ios_base::app);
+	switch (ruleNum) {
+	case 1:
+		coutfile << "<Rat18S> → %% <Opt Declaration List> <Statement List>" << endl;
+		break;
+	case 2:
+		coutfile << "<Opt Function Definitions> → <Function Definitions> | <Empty>" << endl;
+		break;
+	case 3:
+		coutfile << "<Function Definitions> → <Function> <Function Definitions’>" << endl;
+		break;
+	case 4:
+		coutfile << "<Function Definitions’> → <Function Definitions> |  e" << endl;
+		break;
+	case 5:
+		coutfile << "<Function> → function <Identifier> [<Opt Parameter List>] <Opt Declaration List> <Body>" << endl;
+		break;
+	case 6:
+		coutfile << "<Opt Parameter List> → <Parameter List> | <Empty>" << endl;
+		break;
+	case 7:
+		coutfile << "<Parameter List> → <Parameter> <Parameter List’>" << endl;
+		break;
+	case 8:
+		coutfile << "<Parameter List’> → , <Parameter List> |  e" << endl;
+		break;
+	case 9:
+		coutfile << "<Parameter> → <IDs> : <Qualifier>" << endl;
+		break;
+	case 10:
+		coutfile << "<Qualifier> → int | boolean | real" << endl;
+		break;
+	case 11:
+		coutfile << "<Body> → { <Statement List> }" << endl;
+		break;
+	case 12:
+		coutfile << "<Opt Declaration List> → <Declaration List> | <Empty>" << endl;
+		break;
+	case 13:
+		coutfile << "<Declaration List> → <Declaration> ; <Declaration List’>" << endl;
+		break;
+	case 14:
+		coutfile << "<Declaration List’> → <Declaration List> | e" << endl;
+		break;
+	case 15:
+		coutfile << "<Declaration> → <Qualifier> <IDs>" << endl;
+		break;
+	case 16:
+		coutfile << "<IDs> → <Identifier> <IDs’>" << endl;
+		break;
+	case 17:
+		coutfile << "<IDs’> → , <IDs> | e" << endl;
+		break;
+	case 18:
+		coutfile << "<Statement List> → <Statement> <Statement List’>" << endl;
+		break;
+	case 19:
+		coutfile << "<Statement List’> → <Statement List> | e" << endl;
+		break;
+	case 20:
+		coutfile << "<Statement> → <Compound> | <Assign> | <If> | <Return> | <Print> | <Scan> | <While>" << endl;
+		break;
+	case 21:
+		coutfile << "<Compound> → { <Statement List> }" << endl;
+		break;
+	case 22:
+		coutfile << "<Assign> → <Identifier> = <Expression> ;" << endl;
+		break;
+	case 23:
+		coutfile << "<If> →  if ( <Condition> ) <Statement> <If’> endif" << endl;
+		break;
+	case 24:
+		coutfile << "<If’> → else <Statement> | e" << endl;
+		break;
+	case 25:
+		coutfile << "<Return> → return <Return’> ;" << endl;
+		break;
+	case 26:
+		coutfile << "<Return’> → <Expression> | e" << endl;
+		break;
+	case 27:
+		coutfile << "<Print> → put (<Expression>);" << endl;
+		break;
+	case 28:
+		coutfile << "<Scan> → get(<IDs>);" << endl;
+		break;
+	case 29:
+		coutfile << "<While> → while (<Condition>) <Statement>" << endl;
+		break;
+	case 30:
+		coutfile << "<Condition> → <Expression> <Relop> <Expression>" << endl;
+		break;
+	case 31:
+		coutfile << "<Relop> → == | ^= | > | < | => | =<" << endl;
+		break;
+	case 32:
+		coutfile << "<Expression> → <Term> <Expression’>" << endl;
+		break;
+	case 33:
+		coutfile << "<Expression’> → + <Term> <Expression’> | - <Term> <Expression’> | e" << endl;
+		break;
+	case 34:
+		coutfile << "<Term> → <Factor> <Term’>" << endl;
+		break;
+	case 35:
+		coutfile << "<Term’> → * <Factor> <Term’> | / <Factor> <Term’> | e" << endl;
+		break;
+	case 36:
+		coutfile << "<Factor> → - <Primary> | <Primary>" << endl;
+		break;
+	case 37:
+		coutfile << "<Primary> → <Identifier> | <Integer> | <Identifier> (<IDs>) | (<Expression>) | <Real> | true | false" << endl;
+		break;
+	case 38:
+		coutfile << "<Empty> → e" << endl;
+		break;
+	default:
+		coutfile << "Syntax Error" << endl;
+		break;
+	}
+	coutfile.close();
+}
+
+void Real() {
+	if (token.type == "real") {
+		NextToken();
+	}
+	else Error();
+}
+
+void Integer() {
+	if (token.type == "integer") {
+		NextToken();
+	}
+	else Error();
+}
